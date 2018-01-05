@@ -84,7 +84,7 @@ def handle_calculate_IK(req):
 
 		# calculate the correction for rotation error
 		R_Error = R_z.subs(y, radians(180)) * R_y.subs(p, radians(-90))
-
+  
 		# compute the adjusted/corrected end effector matrix 
 		R_EE = R_EE * R_Error
 		
@@ -106,63 +106,70 @@ def handle_calculate_IK(req):
             [req.poses[x].orientation.x, req.poses[x].orientation.y,
                 req.poses[x].orientation.z, req.poses[x].orientation.w])
 
-	# substituting the roll, pitch, yaw values into the EE rotation matrix
-	R_EE = R_EE.subs({'r': roll, 'p': pitch, 'y': yaw})
+        # substituting the roll, pitch, yaw values into the EE rotation matrix
+        R_EE = R_EE.subs({'r': roll, 'p': pitch, 'y': yaw})
 
-	# initializing the end effector position matrix with the current data 
-	EE = Matrix([[px],
-		 [py],
-		 [pz]])
+        # initializing the end effector position matrix with the current data 
+        EE = Matrix([[px],
+	         [py],
+	         [pz]])
 
-	# WC (wrist center)
-	WC = EE - 0.303 * R_EE[:,2]
+        # WC (wrist center)
+        WC = EE - 0.303 * R_EE[:,2]
 
-	# Calculate the joint angles using the Inverse kinematics geometry method
-	# calculating the arc tangent of the wrist center (x,y) coordinates to get
-	# theta1 value at the base of the manipulator
-	theta1 = atan2(WC[1], WC[0])
+        # Calculate the joint angles using the Inverse kinematics geometry method
+        # calculating the arc tangent of the wrist center (x,y) coordinates to get
+        # theta1 value at the base of the manipulator
+        theta1 = atan2(WC[1], WC[0])
 
-	# calculate the theta2 and theta3 values
-	# make a trianlge using joint 1 to joint 3 to WC
-	# see hand drawing for location of the sides
-	side_a = 1.50
-	side_b = 1.25
+        # calculate the theta2 and theta3 values
+        # make a trianlge using joint 1 to joint 3 to WC
+        # see hand drawing for location of the sides
+        side_a = 1.50
+        side_b = 1.25
 
-	# calculating the inputs for side c
-	WC_x_2 = WC[0] ** 2
-	WC_y_2 = WC[1] ** 2
-	WC_z = WC[2]
-	resultant_xy = sqrt(WC_x_2 + WC_y_2)
+        # calculating the inputs for side c
+        WC_x_2 = WC[0] ** 2
+        WC_y_2 = WC[1] ** 2
+        WC_z = WC[2]
+        resultant_xy = sqrt(WC_x_2 + WC_y_2)
 
-	# calculating side c of the triangle
-	side_c = sqrt((resultant_xy - 0.35)**2 + (WC[2] - 0.75)**2)
+        # calculating side c of the triangle
+        side_c = sqrt((resultant_xy - 0.35)**2 + (WC[2] - 0.75)**2)
 
-	# calculate the angles of the triangle using law of cosines
-	angle_a = acos((side_b**2 + side_c**2 - side_a**2)/(2 * side_b * side_c))
-	angle_b = acos((side_a**2 + side_c**2 - side_b**2)/(2 * side_a * side_c))
-	angle_c = acos((side_b**2 + side_a**2 - side_c**2)/(2 * side_b * side_a))
+        # calculate the angles of the triangle using law of cosines
+        angle_a = acos((side_b**2 + side_c**2 - side_a**2)/(2 * side_b * side_c))
+        angle_b = acos((side_a**2 + side_c**2 - side_b**2)/(2 * side_a * side_c))
+        angle_c = acos((side_b**2 + side_a**2 - side_c**2)/(2 * side_b * side_a))
 
-	# calculate theta 2 and 3 using triangle between 2, 3, 5
-	theta2 = pi / 2 - angle_a - atan2(WC[2] - 0.75, sqrt(WC[0]**2 + WC[1]**2)-0.35)
-	theta3 = pi / 2 - (angle_c + 0.036)
+        # calculate theta 2 and 3 using triangle between 2, 3, 5
+        theta2 = pi / 2 - angle_a - atan2(WC[2] - 0.75, sqrt(WC[0]**2 + WC[1]**2)-0.35)
+        theta3 = pi / 2 - (angle_c + 0.036)
 
-	# extract the rotation matrix from the transformation matrix
-	R0_3 = TF0_1[0:3, 0:3] * TF1_2[0:3, 0:3] * TF2_3[0:3, 0:3]
-	# substitute the theta 1 through 3 into the the rotation matrix
-	R0_3 = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3})
+        # extract the rotation matrix from the transformation matrix
+        R0_3 = TF0_1[0:3, 0:3] * TF1_2[0:3, 0:3] * TF2_3[0:3, 0:3]
+        # substitute the theta 1 through 3 into the the rotation matrix
+        R0_3 = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3})
 
-	# multiple the end effector rotation matrix by the inverse of the 0 to 3 rotation matrix
-	R3_6 = R0_3.inv("LU") * R_EE
+        # multiple the end effector rotation matrix by the inverse of the 0 to 3 rotation matrix
+        R3_6 = R0_3.inv("LU") * R_EE
 
-	# calculate theta4 through theta 6 using Euler angle from rotation matrix
-	theta4 = atan2(R3_6[2,2], -R3_6[0,2])
-	theta5 = atan2(sqrt(R3_6[0,2]*R3_6[0,2] + R3_6[2,2]**2), R3_6[1,2])
-	theta6 = atan2(-R3_6[1,1], R3_6[1,0])
-	
-    # Populate response for the IK request
-    # In the next line replace theta1,theta2...,theta6 by your joint angle variables
-    joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
-    joint_trajectory_list.append(joint_trajectory_point)
+        # calculate theta4 through theta 6 using Euler angle from rotation matrix
+        # theta 4 through 6 have multiple solitions
+        # calculate the angle of the wrist center first
+        theta5 = atan2(sqrt(R3_6[0,2]*R3_6[0,2] + R3_6[2,2]**2), R3_6[1,2]) 
+        # comparing the value of theta 5 to determine the signs of the rotation matrix inputs
+        if sin(theta5) < 0:
+            theta4 = atan2(-R3_6[2,2], R3_6[0,2])
+            theta6 = atan2(R3_6[1,1], -R3_6[1,0])
+        else:
+            theta4 = atan2(R3_6[2,2], -R3_6[0,2])
+            theta6 = atan2(-R3_6[1,1], R3_6[1,0])
+
+        # Populate response for the IK request
+        # In the next line replace theta1,theta2...,theta6 by your joint angle variables
+        joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
+        joint_trajectory_list.append(joint_trajectory_point)
 
     rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
     return CalculateIKResponse(joint_trajectory_list)
